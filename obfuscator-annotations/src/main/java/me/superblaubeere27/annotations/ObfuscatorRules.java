@@ -10,6 +10,15 @@
 
 package me.superblaubeere27.annotations;
 
+/**
+ * 混淆规则注解，用于定义一组混淆规则。
+ * 该注解可以应用于类、方法或字段上，指定多个混淆规则。
+ * @author superblaubeere27
+ */
 public @interface ObfuscatorRules {
+    /**
+     * 返回一组混淆规则。
+     * @return 混淆规则数组
+     */
     Rule[] value();
 }

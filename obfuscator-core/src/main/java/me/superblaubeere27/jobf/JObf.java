@@ -238,24 +238,24 @@ public class JObf {
      * @return If the current version is up to date it will return null. If the version is outdated it will return the name of the latest version
      */
     private static String checkForUpdate() {
-        try {
-            String version = JObf.class.getPackage().getImplementationVersion();
-
-            // If the ImplementationVersion is null, the build wasn't built by maven.
-            if (version == null) return null;
-
-            InputStream inputStream = new URL("https://raw.githubusercontent.com/superblaubeere27/obfuscator/master/version").openStream();
-
-            String latestVersion = new String(ByteStreams.toByteArray(inputStream), StandardCharsets.UTF_8);
-
-            VersionComparator comparator = new VersionComparator();
-
-            if (comparator.compare(version, latestVersion) < 0) {
-                return latestVersion;
-            }
-        } catch (Exception e) {
-            log.warn("Update check failed: " + e.getMessage());
-        }
+//        try {
+//            String version = JObf.class.getPackage().getImplementationVersion();
+//
+//            // If the ImplementationVersion is null, the build wasn't built by maven.
+//            if (version == null) return null;
+//
+//            InputStream inputStream = new URL("https://raw.githubusercontent.com/superblaubeere27/obfuscator/master/version").openStream();
+//
+//            String latestVersion = new String(ByteStreams.toByteArray(inputStream), StandardCharsets.UTF_8);
+//
+//            VersionComparator comparator = new VersionComparator();
+//
+//            if (comparator.compare(version, latestVersion) < 0) {
+//                return latestVersion;
+//            }
+//        } catch (Exception e) {
+//            log.warn("Update check failed: " + e.getMessage());
+//        }
         return null;
     }
 

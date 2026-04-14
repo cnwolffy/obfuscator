@@ -10,49 +10,9 @@
 
 package me.superblaubeere27.jobf;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Enumeration;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
-import java.util.zip.CRC32;
-import java.util.zip.Deflater;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
-import java.util.zip.ZipInputStream;
-import java.util.zip.ZipOutputStream;
-
 import com.google.common.io.ByteStreams;
 import lombok.extern.slf4j.Slf4j;
-import me.superblaubeere27.jobf.processors.CrasherTransformer;
-import me.superblaubeere27.jobf.processors.HWIDProtection;
-import me.superblaubeere27.jobf.processors.HideMembers;
-import me.superblaubeere27.jobf.processors.InlineTransformer;
-import me.superblaubeere27.jobf.processors.InvokeDynamic;
-import me.superblaubeere27.jobf.processors.LineNumberRemover;
-import me.superblaubeere27.jobf.processors.NumberObfuscationTransformer;
-import me.superblaubeere27.jobf.processors.ReferenceProxy;
-import me.superblaubeere27.jobf.processors.ShuffleMembersTransformer;
-import me.superblaubeere27.jobf.processors.StaticInitializionTransformer;
-import me.superblaubeere27.jobf.processors.StringEncryptionTransformer;
+import me.superblaubeere27.jobf.processors.*;
 import me.superblaubeere27.jobf.processors.flowObfuscation.FlowObfuscator;
 import me.superblaubeere27.jobf.processors.name.ClassWrapper;
 import me.superblaubeere27.jobf.processors.name.INameObfuscationProcessor;
@@ -70,10 +30,19 @@ import me.superblaubeere27.jobf.utils.script.JObfScript;
 import me.superblaubeere27.jobf.utils.values.Configuration;
 import me.superblaubeere27.jobf.utils.values.ValueManager;
 import org.apache.commons.lang3.StringUtils;
-import org.objectweb.asm.ClassReader;
-import org.objectweb.asm.ModifiedClassWriter;
+import org.objectweb.asm.*;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FrameNode;
+
+import java.io.*;
+import java.lang.reflect.Modifier;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
+import java.util.zip.*;
 
 @Slf4j(topic = "obfuscator")
 public class JObfImpl {
@@ -180,25 +149,25 @@ public class JObfImpl {
     }
 
     //    private Map<String, ClassWrapper> loadClasspathFile(File file) throws IOException {
-//        Map<String, ClassWrapper> map = new HashMap<>();
-//
-//        ZipFile zipIn = new ZipFile(file);
-//        Enumeration<? extends ZipEntry> entries = zipIn.entries();
-//        while (entries.hasMoreElements()) {
-//            ZipEntry ent = entries.nextElement();
-//            if (ent.getName().endsWith(".class")) {
-//                byte[] bytes = ByteStreams.toByteArray(zipIn.getInputStream(ent));
-//
-//                ClassReader reader = new ClassReader(bytes);
-//                ClassNode node = new ClassNode();
-//                reader.accept(node, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
-//                map.put(node.name, new ClassWrapper(node, true, bytes));
-//            }
-//        }
-//        zipIn.close();
-//
-//        return map;
-//    }
+    //        Map<String, ClassWrapper> map = new HashMap<>();
+    //
+    //        ZipFile zipIn = new ZipFile(file);
+    //        Enumeration<? extends ZipEntry> entries = zipIn.entries();
+    //        while (entries.hasMoreElements()) {
+    //            ZipEntry ent = entries.nextElement();
+    //            if (ent.getName().endsWith(".class")) {
+    //                byte[] bytes = ByteStreams.toByteArray(zipIn.getInputStream(ent));
+    //
+    //                ClassReader reader = new ClassReader(bytes);
+    //                ClassNode node = new ClassNode();
+    //                reader.accept(node, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+    //                map.put(node.name, new ClassWrapper(node, true, bytes));
+    //            }
+    //        }
+    //        zipIn.close();
+    //
+    //        return map;
+    //    }
     private List<byte[]> loadClasspathFile(File file) throws IOException {
         ZipFile zipIn = new ZipFile(file);
         Enumeration<? extends ZipEntry> entries = zipIn.entries();
@@ -228,13 +197,13 @@ public class JObfImpl {
                 if (file.isFile()) {
                     log.info("Loading " + file.getAbsolutePath() + " (" + (i++ * 100 / libraryFiles.size()) + "%)");
                     byteList.addAll(loadClasspathFile(file));
-//                    classPath.putAll(loadClasspathFile(file));
+                    //                    classPath.putAll(loadClasspathFile(file));
                 } else {
                     Files.walk(file.toPath()).map(Path::toFile).filter(f -> f.getName().endsWith(".jar") || f.getName().endsWith(".zip") || f.getName().endsWith(".jmod")).forEach(f -> {
                         log.info("Loading " + f.getName() + " (from " + file.getAbsolutePath() + ") to memory");
                         try {
                             byteList.addAll(loadClasspathFile(f));
-//                            classPath.putAll(loadClasspathFile(f));
+                            //                            classPath.putAll(loadClasspathFile(f));
                         } catch (IOException e) {
                             e.printStackTrace();
                         }
@@ -255,7 +224,8 @@ public class JObfImpl {
                         bytes = byteList.poll();
                     }
 
-                    if (bytes == null) break;
+                    if (bytes == null)
+                        break;
 
                     ClassReader reader = new ClassReader(bytes);
                     ClassNode node = new ClassNode();
@@ -355,7 +325,8 @@ public class JObfImpl {
             return;
         }
 
-        for (String s : config.getLibraries()) libraryFiles.add(new File(s));
+        for (String s : config.getLibraries())
+            libraryFiles.add(new File(s));
 
         long startTime = System.currentTimeMillis();
 
@@ -401,7 +372,7 @@ public class JObfImpl {
                     continue;
                 }
 
-                byte[] data = new byte[4096];
+                byte[] data = new byte[8192];
                 ByteArrayOutputStream entryBuffer = new ByteArrayOutputStream();
 
                 int len;
@@ -420,9 +391,6 @@ public class JObfImpl {
                     try {
                         ClassReader cr = new ClassReader(entryData);
                         ClassNode cn = new ClassNode();
-
-
-                        //ca = new LineInjectorAdaptor(ASM4, cn);
 
                         cr.accept(cn, 0);
                         classes.put(entryName, cn);
@@ -449,14 +417,14 @@ public class JObfImpl {
                 libraryClassnodes.add(new ClassWrapper(value, false, null));
             }
 
-//            if (nameobf) {
+            //            if (nameobf) {
             for (INameObfuscationProcessor nameObfuscationProcessor : nameObfuscationProcessors) {
                 nameObfuscationProcessor.transformPost(this, classes);
             }
             for (IPreClassTransformer preProcessor : preProcessors) {
                 preProcessor.process(classes.values());
             }
-//            }
+            //            }
 
             AtomicInteger processed = new AtomicInteger();
 
@@ -476,134 +444,43 @@ public class JObfImpl {
 
             List<Thread> threads = new ArrayList<>();
 
-            for (int i = 0; i < threadCount; i++) {
-//                ZipOutputStream finalOutJar = outJar;
-
-
-                Thread t = new Thread(() -> {
-                    try {
-                        while (true) {
-                            Map.Entry<String, ClassNode> stringClassNodeEntry;
-
-                            synchronized (classQueue) {
-                                stringClassNodeEntry = classQueue.poll();
+            if (threadCount > 1) {
+                for (int i = 0; i < threadCount; i++) {
+                    //                ZipOutputStream finalOutJar = outJar;
+                    Thread t = new Thread(() -> {
+                        try {
+                            doObfuscate(classQueue, toWrite, processed);
+                        } finally {
+                            synchronized (threads) {
+                                threads.remove(Thread.currentThread());
                             }
-
-                            if (stringClassNodeEntry == null) break;
-
-                            ProcessorCallback callback = new ProcessorCallback();
-
-                            String entryName = stringClassNodeEntry.getKey();
-                            byte[] entryData;
-                            ClassNode cn = stringClassNodeEntry.getValue();
-
-                            try {
-                                try {
-
-                                    computeMode = ModifiedClassWriter.COMPUTE_MAXS;
-
-
-                                    if (script == null || script.isObfuscatorEnabled(cn)) {
-                                        log.info(String.format("[%s] (%s/%s), Processing %s", Thread.currentThread().getName(), processed, classes.size(), entryName));
-
-                                        for (IClassTransformer proc : processors) {
-                                            try {
-                                                proc.process(callback, cn);
-                                            } catch (Exception e) {
-                                                e.printStackTrace();
-                                            }
-                                        }
-                                    } else {
-                                        log.info(String.format("[%s] (%s/%s), Skipping %s", Thread.currentThread().getName(), processed, classes.size(), entryName));
-                                    }
-
-                                    if (callback.isForceComputeFrames())
-                                        cn.methods.forEach(method -> Arrays.stream(method.instructions.toArray()).filter(abstractInsnNode -> abstractInsnNode instanceof FrameNode).forEach(abstractInsnNode -> method.instructions.remove(abstractInsnNode)));
-
-
-                                    int mode = computeMode
-                                            | (callback.isForceComputeFrames() ? ModifiedClassWriter.COMPUTE_FRAMES : 0);
-
-                                    log.info(String.format("[%s] (%s/%s), Writing (computeMode = %s) %s", Thread.currentThread().getName(), processed, classes.size(), mode, entryName));
-
-                                    ModifiedClassWriter writer = new ModifiedClassWriter(
-                                            mode
-//                                            ModifiedClassWriter.COMPUTE_MAXS |
-//                                            ModifiedClassWriter.COMPUTE_FRAMES
-                                    );
-                                    cn.accept(writer);
-
-                                    entryData = writer.toByteArray();
-                                } catch (Throwable e) {
-                                    System.err.println("Error while writing " + entryName);
-                                    e.printStackTrace();
-//                                    if (e instanceof) {
-//
-//                                    }
-                                    ModifiedClassWriter writer = new ModifiedClassWriter(ModifiedClassWriter.COMPUTE_MAXS
-                                            //                            | ModifiedClassWriter.COMPUTE_FRAMES
-                                    );
-                                    cn.accept(writer);
-
-
-                                    entryData = writer.toByteArray();
-                                }
-                                try {
-                                    if (Packager.INSTANCE.isEnabled()) {
-                                        entryName = Packager.INSTANCE.encryptName(entryName.replace(".class", ""));
-                                        entryData = Packager.INSTANCE.encryptClass(entryData);
-                                    }
-                                } catch (Exception e) {
-                                    e.printStackTrace();
-                                }
-
-
-//                                synchronized (finalOutJar) {
-//                                    ZipEntry newEntry = new ZipEntry(entryName);
-//                                    finalOutJar.putNextEntry(newEntry);
-//                                    finalOutJar.write(entryData);
-//                                }
-
-                                synchronized (toWrite) {
-                                    toWrite.put(entryName, entryData);
-                                }
-                                //                    JObfImpl.log.log(Level.FINE, String.format("Processed %s (+%.2f KB)", entryName, (entryData.length - entryBuffer.size()) / 1024.0));
-                            } catch (Exception e) {
-                                e.printStackTrace();
-                            }
-
-                            //                JObfImpl.log.log(Level.FINE, "Processed " + entryBuffer.size() + " -> " + entryData.length);
-
-                            processed.getAndIncrement();
                         }
-                    } finally {
-                        synchronized (threads) {
-                            threads.remove(Thread.currentThread());
-                        }
+                    });
+
+                    t.setName("Thread-" + i);
+                    t.setContextClassLoader(ObfuscatorClassLoader.INSTANCE);
+
+                    t.start();
+
+                    synchronized (threads) {
+                        threads.add(t);
                     }
-                });
-
-                t.setName("Thread-" + i);
-                t.setContextClassLoader(ObfuscatorClassLoader.INSTANCE);
-
-                t.start();
-
-                synchronized (threads) {
-                    threads.add(t);
-                }
-            }
-
-
-            while (true) {
-                synchronized (threads) {
-                    if (threads.isEmpty()) break;
-
-                    threads.stream().filter(thread -> thread == null || !thread.isAlive()).collect(Collectors.toList()).forEach(threads::remove);
                 }
 
-                Thread.sleep(100);
-            }
 
+                while (true) {
+                    synchronized (threads) {
+                        if (threads.isEmpty())
+                            break;
+
+                        threads.stream().filter(thread -> thread == null || !thread.isAlive()).collect(Collectors.toList()).forEach(threads::remove);
+                    }
+
+                    Thread.sleep(100);
+                }
+            } else {
+                doObfuscate(classQueue, toWrite, processed);
+            }
             log.info("... Finished after " + Utils.formatTime(System.currentTimeMillis() - startTime));
 
             startTime = System.currentTimeMillis();
@@ -681,6 +558,104 @@ public class JObfImpl {
                     // ignore
                 }
             }
+        }
+    }
+
+    private void doObfuscate(LinkedList<Map.Entry<String, ClassNode>> classQueue, HashMap<String, byte[]> toWrite, AtomicInteger processed) {
+        while (true) {
+            Map.Entry<String, ClassNode> stringClassNodeEntry;
+
+            synchronized (classQueue) {
+                stringClassNodeEntry = classQueue.poll();
+            }
+
+            if (stringClassNodeEntry == null)
+                break;
+
+            ProcessorCallback callback = new ProcessorCallback();
+
+            String entryName = stringClassNodeEntry.getKey();
+            byte[] entryData;
+            ClassNode cn = stringClassNodeEntry.getValue();
+
+            try {
+                try {
+
+                    computeMode = ModifiedClassWriter.COMPUTE_MAXS;
+
+
+                    if (script == null || script.isObfuscatorEnabled(cn)) {
+                        log.info(String.format("[%s] (%s/%s), Processing %s", Thread.currentThread().getName(), processed, classes.size(), entryName));
+
+                        for (IClassTransformer proc : processors) {
+                            try {
+                                proc.process(callback, cn);
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
+                        }
+                    } else {
+                        log.info(String.format("[%s] (%s/%s), Skipping %s", Thread.currentThread().getName(), processed, classes.size(), entryName));
+                    }
+
+                    if (callback.isForceComputeFrames())
+                        cn.methods.forEach(method -> Arrays.stream(method.instructions.toArray())
+                                                           .filter(abstractInsnNode -> abstractInsnNode instanceof FrameNode)
+                                                           .forEach(abstractInsnNode -> method.instructions.remove(abstractInsnNode)));
+
+
+                    int mode = computeMode
+                            | (callback.isForceComputeFrames() ? ModifiedClassWriter.COMPUTE_FRAMES : 0);
+
+                    log.info(String.format("[%s] (%s/%s), Writing (computeMode = %s) %s", Thread.currentThread().getName(), processed, classes.size(), mode, entryName));
+
+                    ModifiedClassWriter writer = new ModifiedClassWriter(
+                            mode
+                            //                                            ModifiedClassWriter.COMPUTE_MAXS |
+                            //                                            ModifiedClassWriter.COMPUTE_FRAMES
+                    );
+                    cn.accept(writer);
+
+                    entryData = writer.toByteArray();
+                } catch (Throwable e) {
+                    System.err.println("Error while writing " + entryName);
+                    e.printStackTrace();
+                    //                                    if (e instanceof) {
+                    //
+                    //                                    }
+                    ModifiedClassWriter writer = new ModifiedClassWriter(ModifiedClassWriter.COMPUTE_MAXS
+                            //                            | ModifiedClassWriter.COMPUTE_FRAMES
+                    );
+                    cn.accept(writer);
+
+
+                    entryData = writer.toByteArray();
+                }
+                try {
+                    if (Packager.INSTANCE.isEnabled()) {
+                        entryName = Packager.INSTANCE.encryptName(entryName.replace(".class", ""));
+                        entryData = Packager.INSTANCE.encryptClass(entryData);
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
+
+                //                                synchronized (finalOutJar) {
+                //                                    ZipEntry newEntry = new ZipEntry(entryName);
+                //                                    finalOutJar.putNextEntry(newEntry);
+                //                                    finalOutJar.write(entryData);
+                //                                }
+
+                synchronized (toWrite) {
+                    toWrite.put(entryName, entryData);
+                }
+                //                    JObfImpl.log.log(Level.FINE, String.format("Processed %s (+%.2f KB)", entryName, (entryData.length - entryBuffer.size()) / 1024.0));
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            //                JObfImpl.log.log(Level.FINE, "Processed " + entryBuffer.size() + " -> " + entryData.length);
+            processed.getAndIncrement();
         }
     }
 

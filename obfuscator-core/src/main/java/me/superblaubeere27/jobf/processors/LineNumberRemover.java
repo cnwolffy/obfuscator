@@ -21,10 +21,7 @@ import me.superblaubeere27.jobf.utils.values.EnabledValue;
 import me.superblaubeere27.jobf.utils.values.StringValue;
 import org.objectweb.asm.tree.*;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Random;
+import java.util.*;
 
 public class LineNumberRemover implements IClassTransformer {
     private static final String PROCESSOR_NAME = "LineNumberRemover";
@@ -46,7 +43,8 @@ public class LineNumberRemover implements IClassTransformer {
 
     private JObfImpl inst;
     private EnabledValue enabled = new EnabledValue(PROCESSOR_NAME, DeprecationLevel.GOOD, true);
-    private BooleanValue renameValues = new BooleanValue(PROCESSOR_NAME, "Rename local variables", DeprecationLevel.GOOD, true);
+    private BooleanValue renameLocal = new BooleanValue(PROCESSOR_NAME, "Rename local variables", DeprecationLevel.GOOD, true);
+    private BooleanValue renameParameters = new BooleanValue(PROCESSOR_NAME, "Rename method parameters", DeprecationLevel.GOOD, true);
     private BooleanValue removeLineNumbers = new BooleanValue(PROCESSOR_NAME, "Remove Line Numbers", DeprecationLevel.GOOD, true);
     private BooleanValue removeDebugNames = new BooleanValue(PROCESSOR_NAME, "Remove Debug Names", DeprecationLevel.GOOD, true);
     private BooleanValue addLocalVariables = new BooleanValue(PROCESSOR_NAME, "Add Local Variables", "Adds random local variables with wrong types. Might break some decompilers", DeprecationLevel.GOOD, true);
@@ -64,6 +62,7 @@ public class LineNumberRemover implements IClassTransformer {
             LabelNode firstLabel = null;
             LabelNode lastLabel = null;
             HashMap<Integer, String> varMap = new HashMap<>();
+
 
             for (AbstractInsnNode abstractInsnNode : method.instructions.toArray()) {
                 if (abstractInsnNode instanceof LineNumberNode && removeLineNumbers.getObject()) {
@@ -97,13 +96,30 @@ public class LineNumberRemover implements IClassTransformer {
                 }
             }
 
-            if (method.parameters != null && renameValues.getObject()) {
+            if (method.parameters != null && renameParameters.getObject()) {
                 for (ParameterNode parameter : method.parameters) {
                     parameter.name = NameUtils.generateLocalVariableName();
                 }
             }
-            if (method.localVariables != null && renameValues.getObject()) {
+            if (method.localVariables != null && renameLocal.getObject()) {
+                StringBuilder methodDesc = new StringBuilder("(");
                 for (LocalVariableNode parameter : method.localVariables) {
+                    if ("this".equals(parameter.name)){
+                        // doNothing
+                    }else {
+                         if (method.desc.startsWith(methodDesc.toString()+parameter.desc)){
+                             if (methodDesc.length()>1){
+                                 methodDesc.append(";");
+                             }
+                             methodDesc.append(parameter.desc);
+                             continue;
+                         }else if (methodDesc.charAt(methodDesc.length()-1) != ')'){
+                             if (parameter.index>2){
+                                 methodDesc.append(";");
+                             }
+                             methodDesc.append(")");
+                         }
+                    }
                     parameter.name = NameUtils.generateLocalVariableName();
                 }
             }

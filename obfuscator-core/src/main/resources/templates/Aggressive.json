@@ -8,6 +8,7 @@
   "LineNumberRemover": {
     "Enabled": true,
     "Rename local variables": true,
+    "Rename method parameters": true,
     "Remove Line Numbers": true,
     "Remove Debug Names": true,
     "Add Local Variables": true

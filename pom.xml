@@ -15,7 +15,7 @@
 
     <groupId>me.superblaubeere27</groupId>
     <artifactId>obfuscator</artifactId>
-    <version>1.9.3-SNAPSHOT</version>
+    <version>2.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <properties>
@@ -29,6 +29,7 @@
     <modules>
         <module>obfuscator-annotations</module>
         <module>obfuscator-core</module>
+        <module>test-dir</module>
     </modules>
 
     <distributionManagement>
