@@ -10,8 +10,18 @@
 
 package me.superblaubeere27.jobf.processors.encryption.string;
 
+/**
+ * 字符串加密算法接口，定义了字符串加密的基本方法。
+ * 实现此接口的类负责提供字符串加密功能。
+ */
 public interface IStringEncryptionAlgorithm {
 
+    /**
+     * 加密字符串。
+     * @param obj 要加密的字符串
+     * @param key 加密密钥
+     * @return 加密后的字符串
+     */
     String encrypt(String obj, String key);
 
 }

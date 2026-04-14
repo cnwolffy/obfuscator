@@ -11,6 +11,7 @@
 package me.superblaubeere27;
 
 import com.google.common.io.ByteStreams;
+import com.google.common.io.Files;
 import me.superblaubeere27.jobf.JObfImpl;
 import me.superblaubeere27.jobf.utils.values.ConfigManager;
 import me.superblaubeere27.jobf.utils.values.Configuration;
@@ -40,7 +41,8 @@ public class ObfuscatorTest {
         try {
             input = File.createTempFile("obf_", ".jar");
 //            Files.copy(new URL("https://github.com/SB27Team/JavaFeatureTest/raw/master/JavaFeatureTest.jar").openStream(), input.toPath());
-            ByteStreams.copy(new URL("https://github.com/SB27Team/JavaFeatureTest/raw/master/JavaFeatureTest.jar").openStream(), new FileOutputStream(input));
+            Files.copy(new File("D:\\SourceCode\\Java\\github\\obfuscator\\test-dir\\JavaFeatureTest.jar"), input);
+//            ByteStreams.copy(new URL("https://github.com/SB27Team/JavaFeatureTest/raw/master/JavaFeatureTest.jar").openStream(), new FileOutputStream(input));
 //            impl.addProcessors();
 
             Configuration configuration = ConfigManager.loadConfig(new String(ByteStreams.toByteArray(ObfuscatorTest.class.getResourceAsStream("/config.jocfg")), StandardCharsets.UTF_8));

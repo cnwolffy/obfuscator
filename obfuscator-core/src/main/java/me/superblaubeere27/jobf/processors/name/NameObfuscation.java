@@ -86,15 +86,28 @@ public class NameObfuscation implements INameObfuscationProcessor {
         mappings.put(str, str1);
     }
 
+    /**
+     * 执行名称混淆的后期处理。
+     * <p>
+     * 该方法是 INameObfuscationProcessor 接口的实现，用于在混淆过程的后期对类名、
+     * 方法名和字段名进行混淆处理。它会构建类的层次结构，生成混淆映射，并应用这些映射。
+     * </p>
+     * 
+     * @param inst JObfImpl 实例，提供混淆器的核心功能
+     * @param nodes 要处理的类节点映射，键为类名，值为对应的 ClassNode
+     */
     @Override
     public void transformPost(JObfImpl inst, HashMap<String, ClassNode> nodes) {
         if (!enabled.getObject()) return;
 
         try {
+            // 初始化映射表，用于存储原始名称到混淆名称的映射
             HashMap<String, String> mappings = new HashMap<>();
 
+            // 创建类包装器列表，用于处理类的层次结构和混淆
             List<ClassWrapper> classWrappers = new ArrayList<>();
 
+            // 编译排除模式，用于确定哪些类、方法和字段不应该被混淆
             for (String s : excludedClasses.getObject().split("\n")) {
                 excludedClassesPatterns.add(compileExcludePattern(s));
             }
@@ -105,6 +118,7 @@ public class NameObfuscation implements INameObfuscationProcessor {
                 excludedFieldsPatterns.add(compileExcludePattern(s));
             }
 
+            // 构建类层次结构，用于处理继承关系
             log.info("Building Hierarchy...");
 
             for (ClassNode value : nodes.values()) {
@@ -117,6 +131,7 @@ public class NameObfuscation implements INameObfuscationProcessor {
 
             log.info("... Finished building hierarchy");
 
+            // 生成混淆映射
             long current = System.currentTimeMillis();
             log.info("Generating mappings...");
 
@@ -124,10 +139,13 @@ public class NameObfuscation implements INameObfuscationProcessor {
 
             AtomicInteger classCounter = new AtomicInteger();
 
+            // 遍历每个类包装器，生成混淆映射
             classWrappers.forEach(classWrapper -> {
+                // 检查类是否应该被排除在混淆之外
                 boolean excluded = this.isClassExcluded(classWrapper);
                 AtomicBoolean builtHierarchy = new AtomicBoolean(false);
 
+                // 将方法的访问修饰符设置为 public，以便在混淆后仍然可以访问
                 for (MethodWrapper method : classWrapper.methods) {
                     if ((Modifier.isPrivate(method.methodNode.access) || Modifier.isProtected(method.methodNode.access)) && excluded)
                         continue;
@@ -136,6 +154,7 @@ public class NameObfuscation implements INameObfuscationProcessor {
                     method.methodNode.access &= ~Opcodes.ACC_PROTECTED;
                     method.methodNode.access |= Opcodes.ACC_PUBLIC;
                 }
+                // 将字段的访问修饰符设置为 public，以便在混淆后仍然可以访问
                 for (FieldWrapper field : classWrapper.fields) {
                     if ((Modifier.isPrivate(field.fieldNode.access) || Modifier.isProtected(field.fieldNode.access)) && excluded)
                         continue;
@@ -145,18 +164,23 @@ public class NameObfuscation implements INameObfuscationProcessor {
                     field.fieldNode.access |= Opcodes.ACC_PUBLIC;
                 }
 
+                // 检查是否存在本地方法
                 AtomicBoolean nativeMethodsFound = new AtomicBoolean(false);
 
+                // 处理方法混淆
                 classWrapper.methods.stream().filter(methodWrapper ->
                         !methodWrapper.methodNode.name.equals("main") && !methodWrapper.methodNode.name.equals("premain")
                                 && !methodWrapper.methodNode.name.startsWith("<")).forEach(methodWrapper -> {
 
+                    // 检查是否为本地方法
                     if (Modifier.isNative(methodWrapper.methodNode.access)) {
                         nativeMethodsFound.set(true);
                     }
 
                     try {
+                        // 检查方法是否可以被重命名
                         if (!isMethodExcluded(classWrapper.originalName, methodWrapper) && canRenameMethodTree(mappings, new HashSet<>(), methodWrapper, classWrapper.originalName)) {
+                            // 生成新的方法名并更新映射
                             this.renameMethodTree(mappings, new HashSet<>(), methodWrapper, classWrapper.originalName, NameUtils.generateMethodName(classWrapper.originalName, methodWrapper.originalDescription));
                         }
                     } catch (Exception e) {
@@ -164,22 +188,29 @@ public class NameObfuscation implements INameObfuscationProcessor {
                     }
                 });
 
+                // 处理字段混淆
                 classWrapper.fields.forEach(fieldWrapper -> {
+                    // 检查字段是否可以被重命名
                     if (!isFieldExcluded(classWrapper.originalName, fieldWrapper) && canRenameFieldTree(mappings, new HashSet<>(), fieldWrapper, classWrapper.originalName)) {
+                        // 生成新的字段名并更新映射
                         this.renameFieldTree(new HashSet<>(), fieldWrapper, classWrapper.originalName, NameUtils.generateFieldName(classWrapper.originalName), mappings);
                     }
                 });
 
+                // 自动排除包含本地方法的类
                 if (!excluded && nativeMethodsFound.get()) {
                     log.info("Automatically excluded " + classWrapper.originalName + " because it has native methods in it.");
                 }
 
+                // 如果类被排除或包含本地方法，则跳过
                 if (excluded || nativeMethodsFound.get()) return;
 
+                // 将类的访问修饰符设置为 public
                 classWrapper.classNode.access &= ~Opcodes.ACC_PRIVATE;
                 classWrapper.classNode.access &= ~Opcodes.ACC_PROTECTED;
                 classWrapper.classNode.access |= Opcodes.ACC_PUBLIC;
 
+                // 生成新的类名并更新映射
                 putMapping(mappings, classWrapper.originalName, getPackageName() + NameUtils.generateClassName());
                 classCounter.incrementAndGet();
             });
@@ -203,13 +234,18 @@ public class NameObfuscation implements INameObfuscationProcessor {
 
             current = System.currentTimeMillis();
 
+            // 创建成员重映射器，用于应用混淆映射
             Remapper simpleRemapper = new MemberRemapper(mappings);
 
+            // 应用混淆映射到每个类
             for (ClassWrapper classWrapper : classWrappers) {
                 ClassNode classNode = classWrapper.classNode;
 
+                // 创建类节点的副本，并应用重映射
                 ClassNode copy = new ClassNode();
                 classNode.accept(new ClassRemapper(copy, simpleRemapper));
+                
+                // 更新方法节点
                 for (int i = 0; i < copy.methods.size(); i++) {
                     classWrapper.methods.get(i).methodNode = copy.methods.get(i);
 
@@ -228,29 +264,36 @@ public class NameObfuscation implements INameObfuscationProcessor {
                     }*/
                 }
 
+                // 更新字段节点
                 if (copy.fields != null) {
                     for (int i = 0; i < copy.fields.size(); i++) {
                         classWrapper.fields.get(i).fieldNode = copy.fields.get(i);
                     }
                 }
 
+                // 更新类节点并更新类映射
                 classWrapper.classNode = copy;
                 JObfImpl.classes.remove(classWrapper.originalName + ".class");
                 JObfImpl.classes.put(classWrapper.classNode.name + ".class", classWrapper.classNode);
                 //            JObfImpl.INSTANCE.getClassPath().put();
                 //            this.getClasses().put(classWrapper.classNode.name, classWrapper);
 
+                // 创建类写入器，用于生成混淆后的类字节码
                 ClassWriter writer = new ClassWriter(0);
 
+                // 生成混淆后的类字节码
                 classWrapper.classNode.accept(writer);
 
+                // 更新类包装器的原始类字节码
                 classWrapper.originalClass = writer.toByteArray();
 
+                // 更新类路径映射
                 JObfImpl.INSTANCE.getClassPath().put(classWrapper.classNode.name, classWrapper);
             }
 
             log.info(String.format("... Finished applying mappings (%s)", Utils.formatTime(System.currentTimeMillis() - current)));
         } finally {
+            // 清理排除模式列表，释放资源
             excludedClassesPatterns.clear();
             excludedMethodsPatterns.clear();
             excludedFieldsPatterns.clear();

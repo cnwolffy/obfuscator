@@ -32,7 +32,7 @@
   "ReferenceProxy": {
     "Enabled": false
   },
-  "PeepholeOptimizer": {
+  "PeepholeOptimizer": { // 优化器
     "Enabled": false,
     "Experimental Pop folding": false
   },

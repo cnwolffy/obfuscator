@@ -20,22 +20,19 @@ import me.superblaubeere27.jobf.processors.name.InnerClassRemover;
 import me.superblaubeere27.jobf.processors.name.NameObfuscation;
 import me.superblaubeere27.jobf.processors.optimizer.Optimizer;
 import me.superblaubeere27.jobf.processors.packager.Packager;
-import me.superblaubeere27.jobf.utils.ClassTree;
-import me.superblaubeere27.jobf.utils.MissingClassException;
-import me.superblaubeere27.jobf.utils.NameUtils;
-import me.superblaubeere27.jobf.utils.Utils;
+import me.superblaubeere27.jobf.utils.*;
 import me.superblaubeere27.jobf.utils.scheduler.ScheduledRunnable;
 import me.superblaubeere27.jobf.utils.scheduler.Scheduler;
 import me.superblaubeere27.jobf.utils.script.JObfScript;
 import me.superblaubeere27.jobf.utils.values.Configuration;
 import me.superblaubeere27.jobf.utils.values.ValueManager;
 import org.apache.commons.lang3.StringUtils;
-import org.objectweb.asm.*;
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.ModifiedClassWriter;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.FrameNode;
 
 import java.io.*;
-import java.lang.reflect.Modifier;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -44,24 +41,95 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.zip.*;
 
+/**
+ * JObfImpl 类是混淆器的核心实现类，负责协调整个混淆过程。
+ * 它管理类的加载、转换和输出，以及各种混淆处理器的协调。
+ */
 @Slf4j(topic = "obfuscator")
 public class JObfImpl {
+    /**
+     * JObfImpl 的单例实例。
+     */
     public static final JObfImpl INSTANCE = new JObfImpl();
+
+    /**
+     * 类转换器列表，包含所有要应用的混淆处理器。
+     */
     public static List<IClassTransformer> processors;
+
+    /**
+     * 存储加载的类节点，键为类名，值为对应的 ClassNode。
+     */
     public static HashMap<String, ClassNode> classes = new HashMap<>();
+
+    /**
+     * 存储非类文件，键为文件名，值为文件内容的字节数组。
+     */
     public static HashMap<String, byte[]> files = new HashMap<>();
+
+    /**
+     * 预处理转换器列表。
+     */
     private static List<IPreClassTransformer> preProcessors;
+
+    /**
+     * 混淆脚本，用于控制混淆行为。
+     */
     public JObfScript script;
+
+    /**
+     * 主类是否被更改的标志。
+     */
     private boolean mainClassChanged;
+
+    /**
+     * 名称混淆处理器列表。
+     */
     private final List<INameObfuscationProcessor> nameObfuscationProcessors = new ArrayList<>();
+
+    /**
+     * 主类名称。
+     */
     private String mainClass;
+
+    /**
+     * 类路径映射，键为类名，值为对应的 ClassWrapper。
+     */
     private Map<String, ClassWrapper> classPath = new HashMap<>();
+
+    /**
+     * 类层次结构映射，键为类名，值为对应的 ClassTree。
+     */
     private Map<String, ClassTree> hierarchy = new HashMap<>();
-    private Set<ClassWrapper> libraryClassnodes = new HashSet<>();
+
+    /**
+     * 库类节点集合。
+     */
+    private Set<ClassWrapper> libraryClassNodes = new HashSet<>();
+
+    /**
+     * 库文件列表。
+     */
     private List<File> libraryFiles;
+
+    /**
+     * 计算模式，用于 ASM 类写入器。
+     */
     private int computeMode;
+
+    /**
+     * 是否使用 invokedynamic 指令。
+     */
     private boolean invokeDynamic;
+
+    /**
+     * 混淆器设置。
+     */
     private final JObfSettings settings = new JObfSettings();
+
+    /**
+     * 线程数，默认为可用处理器数量的最大值，最少为1。
+     */
     private int threadCount = Math.max(1, Runtime.getRuntime().availableProcessors());
 
 
@@ -98,51 +166,87 @@ public class JObfImpl {
         return hierarchy.get(ref);
     }
 
+    /**
+     * 构建类的层次结构。
+     * 递归地构建类的继承层次结构，包括父类和接口，并处理缺失类的情况。
+     *
+     * @param classWrapper       要构建层次结构的类包装器
+     * @param sub                子类包装器，如果当前类是作为子类的父类被处理
+     * @param acceptMissingClass 是否接受缺失的类
+     * @throws MissingClassException 如果缺少必要的类且 acceptMissingClass 为 false
+     */
     public void buildHierarchy(ClassWrapper classWrapper, ClassWrapper sub, boolean acceptMissingClass) {
+        // 如果该类的层次结构尚未构建
         if (hierarchy.get(classWrapper.classNode.name) == null) {
+            // 创建新的类树节点
             ClassTree tree = new ClassTree(classWrapper);
+
+            // 处理父类
             if (classWrapper.classNode.superName != null) {
                 tree.parentClasses.add(classWrapper.classNode.superName);
                 ClassWrapper superClass = classPath.get(classWrapper.classNode.superName);
-
+                boolean isJdkClass = false;
+                if (superClass==null){
+                    isJdkClass= JdkClassUtils.isJdkClass(classWrapper.classNode.superName) || JdkClassUtils.isSpringClass(classWrapper.classNode.superName);
+                }
+                // 检查父类是否存在
                 if (superClass == null && !acceptMissingClass)
-                    throw new MissingClassException(classWrapper.classNode.superName + " (referenced in " + classWrapper.classNode.name + ") is missing in the classPath.");
+                    if (!isJdkClass){
+                        throw new MissingClassException(classWrapper.classNode.superName + " (referenced in " + classWrapper.classNode.name + ") is missing in the classPath.");
+                    }
                 else if (superClass == null) {
+                    // 标记缺少父类
                     tree.missingSuperClass = true;
-
                     log.warn("Missing class: " + classWrapper.classNode.superName + " (No methods of subclasses will be remapped)");
                 } else {
+                    // 递归构建父类的层次结构
                     buildHierarchy(superClass, classWrapper, acceptMissingClass);
 
-                    // Inherit the missingSuperClass state
+                    // 继承缺少父类的状态
                     if (hierarchy.get(classWrapper.classNode.superName).missingSuperClass) {
                         tree.missingSuperClass = true;
                     }
                 }
             }
+
+            // 处理接口
             if (classWrapper.classNode.interfaces != null && !classWrapper.classNode.interfaces.isEmpty()) {
                 for (String s : classWrapper.classNode.interfaces) {
                     tree.parentClasses.add(s);
                     ClassWrapper interfaceClass = classPath.get(s);
+                    boolean isJdkInterface = false;
+                    // 忽略java jdk自带的接口，如Runnable、Callable等
+                    if (interfaceClass==null){
+                        // 判断是否是java jdk自带的接口
+                        isJdkInterface = JdkClassUtils.isJdkClass(s) || JdkClassUtils.isSpringClass(s);
+                    }
 
+                    // 检查接口是否存在
                     if (interfaceClass == null && !acceptMissingClass)
-                        throw new MissingClassException(s + " (referenced in " + classWrapper.classNode.name + ") is missing in the classPath.");
+                        if (!isJdkInterface) {
+                            throw new MissingClassException(s + " (referenced in " + classWrapper.classNode.name + ") is missing in the classPath.");
+                        }
                     else if (interfaceClass == null) {
+                        // 标记缺少父类（接口）
                         tree.missingSuperClass = true;
-
                         log.warn("Missing interface class: " + s + " (No methods of subclasses will be remapped)");
                     } else {
+                        // 递归构建接口的层次结构
                         buildHierarchy(interfaceClass, classWrapper, acceptMissingClass);
 
-                        // Inherit the missingSuperClass state
+                        // 继承缺少父类的状态
                         if (hierarchy.get(s).missingSuperClass) {
                             tree.missingSuperClass = true;
                         }
                     }
                 }
             }
+
+            // 将构建好的层次结构添加到映射中
             hierarchy.put(classWrapper.classNode.name, tree);
         }
+
+        // 如果存在子类，将子类添加到当前类的子类列表中
         if (sub != null) {
             hierarchy.get(classWrapper.classNode.name).subClasses.add(sub.classNode.name);
         }
@@ -247,7 +351,7 @@ public class JObfImpl {
 
         }
 
-        libraryClassnodes.addAll(classPath.values());
+        libraryClassNodes.addAll(classPath.values());
     }
 
     public Map<String, ClassWrapper> getClassPath() {
@@ -255,7 +359,7 @@ public class JObfImpl {
     }
 
     public boolean isLibrary(ClassNode classNode) {
-        return libraryClassnodes.stream().anyMatch(e -> e.classNode.name.equals(classNode.name));
+        return libraryClassNodes.stream().anyMatch(e -> e.classNode.name.equals(classNode.name));
     }
 
     public boolean isLoadedCode(ClassNode classNode) {
@@ -309,7 +413,7 @@ public class JObfImpl {
         libraryFiles = new ArrayList<>();
 
         classes = new HashMap<>();
-        libraryClassnodes = new HashSet<>();
+        libraryClassNodes = new HashSet<>();
         classPath = new HashMap<>();
         files = new HashMap<>();
         hierarchy = new HashMap<>();
@@ -414,7 +518,7 @@ public class JObfImpl {
                 classPath.put(stringClassNodeEntry.getKey().replace(".class", ""), new ClassWrapper(stringClassNodeEntry.getValue(), false, classDataMap.get(stringClassNodeEntry.getKey())));
             }
             for (ClassNode value : classes.values()) {
-                libraryClassnodes.add(new ClassWrapper(value, false, null));
+                libraryClassNodes.add(new ClassWrapper(value, false, null));
             }
 
             //            if (nameobf) {
@@ -470,9 +574,9 @@ public class JObfImpl {
 
                 while (true) {
                     synchronized (threads) {
-                        if (threads.isEmpty())
+                        if (threads.isEmpty()) {
                             break;
-
+                        }
                         threads.stream().filter(thread -> thread == null || !thread.isAlive()).collect(Collectors.toList()).forEach(threads::remove);
                     }
 
@@ -502,13 +606,17 @@ public class JObfImpl {
                 byte[] entryData = stringEntry.getValue();
 
                 if (entryName.equals("META-INF/MANIFEST.MF")) {
+                    // 处理 MANIFEST.MF 文件
                     if (Packager.INSTANCE.isEnabled()) {
+                        // 如果启用了打包器，将 MANIFEST.MF 中的主类替换为打包器的解密类名
                         entryData = Utils.replaceMainClass(new String(entryData, StandardCharsets.UTF_8), Packager.INSTANCE.getDecryptionClassName()).getBytes(StandardCharsets.UTF_8);
                     } else if (mainClassChanged) {
+                        // 如果主类被更改，更新 MANIFEST.MF 中的主类名
                         entryData = Utils.replaceMainClass(new String(entryData, StandardCharsets.UTF_8), mainClass).getBytes(StandardCharsets.UTF_8);
                         log.info("Replaced Main-Class with " + mainClass);
                     }
 
+                    // 记录 MANIFEST.MF 文件处理完成
                     log.info("Processed MANIFEST.MF");
                 }
                 log.info("Copying " + entryName);
@@ -532,7 +640,7 @@ public class JObfImpl {
             classPath.clear();
             classes.clear();
             libraryFiles.clear();
-            libraryClassnodes.clear();
+            libraryClassNodes.clear();
             files.clear();
             hierarchy.clear();
 
