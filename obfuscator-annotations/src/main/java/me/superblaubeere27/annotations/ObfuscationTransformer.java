@@ -64,6 +64,10 @@ public enum ObfuscationTransformer {
      */
     NAME_OBFUSCATION,
     /**
+     * 字段名称混淆 - 混淆私有字段的名称
+     */
+    FIELD_OBFUSCATION,
+    /**
      * 成员隐藏 - 隐藏类成员
      */
     HIDE_MEMBERS,

@@ -14,10 +14,7 @@ import com.google.common.io.ByteStreams;
 import lombok.extern.slf4j.Slf4j;
 import me.superblaubeere27.jobf.processors.*;
 import me.superblaubeere27.jobf.processors.flowObfuscation.FlowObfuscator;
-import me.superblaubeere27.jobf.processors.name.ClassWrapper;
-import me.superblaubeere27.jobf.processors.name.INameObfuscationProcessor;
-import me.superblaubeere27.jobf.processors.name.InnerClassRemover;
-import me.superblaubeere27.jobf.processors.name.NameObfuscation;
+import me.superblaubeere27.jobf.processors.name.*;
 import me.superblaubeere27.jobf.processors.optimizer.Optimizer;
 import me.superblaubeere27.jobf.processors.packager.Packager;
 import me.superblaubeere27.jobf.utils.*;
@@ -381,7 +378,7 @@ public class JObfImpl {
         processors.add(new LineNumberRemover(this));
         processors.add(new ShuffleMembersTransformer(this));
 
-
+        nameObfuscationProcessors.add(new FieldObfuscation());
         nameObfuscationProcessors.add(new NameObfuscation());
         nameObfuscationProcessors.add(new InnerClassRemover());
         processors.add(new CrasherTransformer(this));
