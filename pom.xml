@@ -35,11 +35,11 @@
     <distributionManagement>
         <repository>
             <id>releases</id>
-            <url>http://192.168.0.190:17899/repository/releases</url>
+            <url>http://192.168.0.201:17899/repository/releases</url>
         </repository>
         <snapshotRepository>
             <id>snapshots</id>
-            <url>http://192.168.0.190:17899/repository/snapshots</url>
+            <url>http://192.168.0.201:17899/repository/snapshots</url>
         </snapshotRepository>
     </distributionManagement>
 </project>
